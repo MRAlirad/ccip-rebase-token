@@ -13,7 +13,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
     * Balances are calculated dynamically in the `balanceOf` function.
 */
 contract RebaseToken is ERC20 {
-    //! ERRORS !//
+    //! Events !//
     event InterestRateSet(uint256 newInterestRate);
 
     //! ERRORS !//
@@ -40,6 +40,13 @@ contract RebaseToken is ERC20 {
         s_userInterestRate[_to] = s_interestRate;
         _mint(_to, _amount);
     }
+    
+    function burn (address _from, uint256 _amount) external {
+        if(_amount == type(uint256).max) _amount = balanceOf(_from);
+
+        _mintAccuredInterest(_from);
+        _burn(_from, _amount);
+    }
 
     function balanceOf (address _user) public view override returns (uint256) {
         return super.balanceOf(_user) * _calculateUserAccumulatedInterestSinceLastUpdate(_user) / PRECISIO_FACTOR;
@@ -50,7 +57,14 @@ contract RebaseToken is ERC20 {
     }
 
     function _mintAccuredInterest(address _user) internal {
+        uint256 previousPrincipleBalance = super.balanceOf(_user);
+        uint256 currentBalance = balanceOf(_user);
+
+        uint256 balanceIncrease = currentBalance - previousPrincipleBalance;
+
         s_userLastUpdatedTimestamp[_user] = block.timestamp;
+
+        _mint(_user, balanceIncrease);
     }
 
     function _calculateUserAccumulatedInterestSinceLastUpdate(address _user) internal view returns(uint256 linearInterest) {
