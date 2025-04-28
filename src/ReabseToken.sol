@@ -34,13 +34,17 @@ contract RebaseToken is ERC20 {
         s_interestRate = _newInterestRate;
         emit InterestRateSet(_newInterestRate);
     }
+    
+    function principleBalanceOf (address _user) external view returns (uint256) {
+        return super.balanceOf(_user);
+    }
 
     function mint (address _to, uint256 _amount) external {
         _mintAccuredInterest(_to);
         s_userInterestRate[_to] = s_interestRate;
         _mint(_to, _amount);
     }
-    
+
     function burn (address _from, uint256 _amount) external {
         if(_amount == type(uint256).max) _amount = balanceOf(_from);
 
@@ -50,6 +54,32 @@ contract RebaseToken is ERC20 {
 
     function balanceOf (address _user) public view override returns (uint256) {
         return super.balanceOf(_user) * _calculateUserAccumulatedInterestSinceLastUpdate(_user) / PRECISIO_FACTOR;
+    }
+
+    function transfer (address _recipient, uint256 _amount) public override returns (bool) {
+        _mintAccuredInterest(msg.sender);
+        _mintAccuredInterest(_recipient);
+
+        if(_amount == type(uint256).max) _amount = balanceOf(msg.sender);
+
+        if (balanceOf(_recipient) == 0) {
+            s_userInterestRate[_recipient] = s_userInterestRate[msg.sender];
+        }
+
+        return super.transfer(_recipient, _amount);
+    }
+    
+    function transferFrom (address _sender, address _recipient, address _amount) public override returns (bool) {
+        _mintAccuredInterest(_sender);
+        _mintAccuredInterest(_recipient);
+
+        if(_amount == type(uint256).max) _amount = balanceOf(_sender);
+
+        if (balanceOf(_recipient) == 0) {
+            s_userInterestRate[_recipient] = s_userInterestRate[_sender];
+        }
+
+        return super.transferFrom(_sender, _recipient, _amount);
     }
 
     function getUserInterestRate(address _user) external view returns (uint256) {
@@ -65,6 +95,10 @@ contract RebaseToken is ERC20 {
         s_userLastUpdatedTimestamp[_user] = block.timestamp;
 
         _mint(_user, balanceIncrease);
+    }
+    
+    function getInterestRate() external view returns (uint256) {
+        return s_interestRate;
     }
 
     function _calculateUserAccumulatedInterestSinceLastUpdate(address _user) internal view returns(uint256 linearInterest) {
