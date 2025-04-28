@@ -532,13 +532,13 @@ This lesson explores two essential functions within a rebase token smart contrac
 
 Before diving into the functions, let's recap key concepts:
 
-* **Rebase Token:** A type of ERC20 token where a user's balance automatically increases over time based on a predefined mechanism, like interest accrual.
+-   **Rebase Token:** A type of ERC20 token where a user's balance automatically increases over time based on a predefined mechanism, like interest accrual.
 
-* **Principal Balance:** The amount of tokens explicitly minted or transferred to a user. This is the value stored in the base ERC20 `_balances` mapping (accessible via `super.balanceOf`).
+-   **Principal Balance:** The amount of tokens explicitly minted or transferred to a user. This is the value stored in the base ERC20 `_balances` mapping (accessible via `super.balanceOf`).
 
-* **Actual Balance:** The user's principal balance *plus* any interest that has accrued since their last balance update event (like a mint, burn, or transfer). Our contract calculates this on-the-fly using an overridden `balanceOf` function that factors in the time elapsed and the user's specific interest rate.
+-   **Actual Balance:** The user's principal balance _plus_ any interest that has accrued since their last balance update event (like a mint, burn, or transfer). Our contract calculates this on-the-fly using an overridden `balanceOf` function that factors in the time elapsed and the user's specific interest rate.
 
-The core challenge is ensuring that the *principal balance* accurately reflects the *actual balance* before any operation that relies on or modifies this principal balance. This is where `_mintAccruedInterest` comes in.
+The core challenge is ensuring that the _principal balance_ accurately reflects the _actual balance_ before any operation that relies on or modifies this principal balance. This is where `_mintAccruedInterest` comes in.
 
 **The** **`_mintAccruedInterest`** **Function: Synchronizing Balances**
 
@@ -547,9 +547,9 @@ The `_mintAccruedInterest` function is a crucial internal helper. Its sole purpo
 **Implementation Steps:**
 
 1. **Get Previous Principal Balance:** We first retrieve the user's balance as currently recorded by the standard ERC20 logic using `super.balanceOf(_user)`. This represents the tokens already minted to them.
-2. **Get Current Actual Balance:** Next, we call our contract's *overridden* `balanceOf(_user)` function. This function performs the interest calculation, returning the principal plus newly accrued interest.
+2. **Get Current Actual Balance:** Next, we call our contract's _overridden_ `balanceOf(_user)` function. This function performs the interest calculation, returning the principal plus newly accrued interest.
 3. **Calculate Interest to Mint:** The difference between the `currentBalance` (actual) and the `previousPrincipleBalance` represents the interest (`balanceIncrease`) that has accrued and needs to be minted.
-4. **Update Last Timestamp (Effect):** Critically, we update the user's last interaction timestamp (`s_userLastUpdatedTimestamp[_user] = block.timestamp;`). Following the **Checks-Effects-Interactions** pattern, we modify the contract's state *before* performing external calls or interactions (like minting) to prevent potential reentrancy issues.
+4. **Update Last Timestamp (Effect):** Critically, we update the user's last interaction timestamp (`s_userLastUpdatedTimestamp[_user] = block.timestamp;`). Following the **Checks-Effects-Interactions** pattern, we modify the contract's state _before_ performing external calls or interactions (like minting) to prevent potential reentrancy issues.
 5. **Mint the Interest (Interaction):** Finally, we call the internal `_mint(_user, balanceIncrease)` function inherited from OpenZeppelin's ERC20 contract. This issues the calculated `balanceIncrease` amount of tokens to the user, updating their principal balance in the `_balances` mapping. The `_mint` function itself emits the standard ERC20 `Transfer` event (from the zero address).
 
 ```solidity
@@ -578,12 +578,12 @@ By calling `_mintAccruedInterest` at the beginning of any function that modifies
 
 The `burn` function allows users (or often, a managing contract like a vault) to destroy their tokens. This is typically used for withdrawals, redemptions, or potentially in cross-chain bridging mechanisms (burn-and-mint).
 
-A key consideration here is handling "dust interest" – the small amount of interest that might accrue between when a user decides to withdraw their *entire* balance and when the transaction actually executes on-chain. To address this cleanly, we implement the "Max Uint Pattern".
+A key consideration here is handling "dust interest" – the small amount of interest that might accrue between when a user decides to withdraw their _entire_ balance and when the transaction actually executes on-chain. To address this cleanly, we implement the "Max Uint Pattern".
 
 **Implementation Steps:**
 
-1. **Handle Max Uint Case:** We check if the requested `_amount` to burn is equal to `type(uint256).max`. This special value signals the user's intent to burn their entire balance. If detected, we ignore the provided `_amount` and instead fetch the user's *current actual balance* by calling `balanceOf(_from)`. This ensures that any dust interest accrued up to the moment of execution is included in the burn amount, allowing for a complete withdrawal.
-2. **Mint Accrued Interest:** Before burning, we *must* call `_mintAccruedInterest(_from)`. This updates the user's principal balance to include any interest earned up to this point, ensuring the subsequent burn operation targets the correct, up-to-date principal amount.
+1. **Handle Max Uint Case:** We check if the requested `_amount` to burn is equal to `type(uint256).max`. This special value signals the user's intent to burn their entire balance. If detected, we ignore the provided `_amount` and instead fetch the user's _current actual balance_ by calling `balanceOf(_from)`. This ensures that any dust interest accrued up to the moment of execution is included in the burn amount, allowing for a complete withdrawal.
+2. **Mint Accrued Interest:** Before burning, we _must_ call `_mintAccruedInterest(_from)`. This updates the user's principal balance to include any interest earned up to this point, ensuring the subsequent burn operation targets the correct, up-to-date principal amount.
 3. **Burn Tokens:** We call the internal `_burn(_from, _amount)` function (inherited from OpenZeppelin ERC20). This decreases the user's principal balance by the specified `_amount` (which might have been updated in step 1) and emits the standard ERC20 `Transfer` event (to the zero address).
 
 ```solidity
@@ -608,15 +608,15 @@ function burn(address _from, uint256 _amount) external { // Note: Access control
 
 **Key Relationships and Considerations:**
 
-* **Interdependency:** `burn` (and other state-changing functions like `mint`) rely heavily on `_mintAccruedInterest` to maintain balance integrity.
+-   **Interdependency:** `burn` (and other state-changing functions like `mint`) rely heavily on `_mintAccruedInterest` to maintain balance integrity.
 
-* **Timestamp Updates:** The `_mintAccruedInterest` function's update to `s_userLastUpdatedTimestamp` is vital for accurate future interest calculations performed by the overridden `balanceOf` function.
+-   **Timestamp Updates:** The `_mintAccruedInterest` function's update to `s_userLastUpdatedTimestamp` is vital for accurate future interest calculations performed by the overridden `balanceOf` function.
 
-* **Event Emission:** We leverage the `Transfer` events emitted by the underlying `_mint` (within `_mintAccruedInterest`) and `_burn` (within `burn`) functions for off-chain tracking and indexing. No additional events are strictly necessary in these specific functions.
+-   **Event Emission:** We leverage the `Transfer` events emitted by the underlying `_mint` (within `_mintAccruedInterest`) and `_burn` (within `burn`) functions for off-chain tracking and indexing. No additional events are strictly necessary in these specific functions.
 
-* **Max Uint Pattern:** Using `type(uint256).max` is a common and effective DeFi pattern for handling full balance operations, ensuring users can completely exit their positions without leaving dust behind. This pattern is seen in established protocols like Aave V3's aTokens.
+-   **Max Uint Pattern:** Using `type(uint256).max` is a common and effective DeFi pattern for handling full balance operations, ensuring users can completely exit their positions without leaving dust behind. This pattern is seen in established protocols like Aave V3's aTokens.
 
-* **Access Control:** As noted in the code comments, proper access control (e.g., using modifiers like `onlyOwner` or role-based access) should be added to functions like `burn` and `mint` to restrict who can call them, depending on the contract's specific requirements.
+-   **Access Control:** As noted in the code comments, proper access control (e.g., using modifiers like `onlyOwner` or role-based access) should be added to functions like `burn` and `mint` to restrict who can call them, depending on the contract's specific requirements.
 
 By implementing `_mintAccruedInterest` and `burn` as described, we create a robust rebase token system where user balances accurately reflect accrued interest, and withdrawals can be handled cleanly and completely.
 
@@ -626,11 +626,11 @@ This lesson focuses on completing our `RebaseToken` smart contract. We'll examin
 
 ### Understanding the Rebase Mechanism
 
-The core challenge with our `RebaseToken` lies in the difference between a user's *principle balance* and their *effective balance*.
+The core challenge with our `RebaseToken` lies in the difference between a user's _principle balance_ and their _effective balance_.
 
-* **Principle Balance:** This represents the number of tokens explicitly minted to or received by a user through transfers. It's the amount directly tracked by the standard ERC20 `_balances` mapping.
+-   **Principle Balance:** This represents the number of tokens explicitly minted to or received by a user through transfers. It's the amount directly tracked by the standard ERC20 `_balances` mapping.
 
-* **Effective Balance:** This is the principle balance *plus* any interest that has accrued for the user since their last interaction with the contract (like a transfer or deposit).
+-   **Effective Balance:** This is the principle balance _plus_ any interest that has accrued for the user since their last interaction with the contract (like a transfer or deposit).
 
 Our contract needs to calculate and account for this accrued interest whenever an operation depends on an up-to-date balance. This interest accrues based on a global rate (`s_interestRate`) and potentially user-specific rates (`s_userInterestRate`).
 
@@ -638,25 +638,25 @@ Our contract needs to calculate and account for this accrued interest whenever a
 
 We inherit from OpenZeppelin's `ERC20.sol`. Let's review its public and external functions to see what needs modification:
 
-* `name()`, `symbol()`: These return the token's name and symbol. No overrides are needed.
+-   `name()`, `symbol()`: These return the token's name and symbol. No overrides are needed.
 
-* `decimals()`: Returns the number of decimals (typically 18). While `virtual`, allowing overrides (like USDC's 6 decimals), we don't need to change it here.
+-   `decimals()`: Returns the number of decimals (typically 18). While `virtual`, allowing overrides (like USDC's 6 decimals), we don't need to change it here.
 
-* `allowance(address owner, address spender)`, `approve(address spender, uint256 value)`: Standard ERC20 approval mechanism. No overrides are needed. This functionality is crucial for interactions with other contracts or protocols, including potential cross-chain scenarios.
+-   `allowance(address owner, address spender)`, `approve(address spender, uint256 value)`: Standard ERC20 approval mechanism. No overrides are needed. This functionality is crucial for interactions with other contracts or protocols, including potential cross-chain scenarios.
 
-* Internal Functions (`_transfer`, `_update`, `_mint`, `_burn`, `_approve`, `_spendAllowance`): These handle the core logic for updating the `_balances` mapping and `_totalSupply`. Since they correctly manage the *principle* balances and supply, we don't need to override them directly. Our logic will hook into the public functions that call these internal ones.
+-   Internal Functions (`_transfer`, `_update`, `_mint`, `_burn`, `_approve`, `_spendAllowance`): These handle the core logic for updating the `_balances` mapping and `_totalSupply`. Since they correctly manage the _principle_ balances and supply, we don't need to override them directly. Our logic will hook into the public functions that call these internal ones.
 
 Two key functions, `balanceOf` and `totalSupply`, require special attention.
 
 ### Overriding `balanceOf` for Accurate Balances
 
-The standard `balanceOf(address account)` simply returns `_balances[account]`, which is only the *principle* balance. This is insufficient for our `RebaseToken` as it doesn't reflect the accrued interest.
+The standard `balanceOf(address account)` simply returns `_balances[account]`, which is only the _principle_ balance. This is insufficient for our `RebaseToken` as it doesn't reflect the accrued interest.
 
 Therefore, we must **override** **`balanceOf`**. The overridden function performs the following:
 
 1. Retrieves the principle balance using `super.balanceOf(_user)`.
 2. Calculates the interest accumulated for the user since their last balance update using an internal helper function (`_calculateUserAccumulatedInterestSinceLastUpdate`).
-3. Combines the principle balance and the accumulated interest factor (adjusting for precision using `PRECISION_FACTOR`) to return the user's current *effective balance*.
+3. Combines the principle balance and the accumulated interest factor (adjusting for precision using `PRECISION_FACTOR`) to return the user's current _effective balance_.
 
 The formula effectively becomes:
 `Effective Balance = super.balanceOf(_user) * _calculateUserAccumulatedInterestSinceLastUpdate(_user) / PRECISION_FACTOR`
@@ -665,9 +665,9 @@ This ensures that any external call checking a user's balance receives the accur
 
 ### The Challenge of `totalSupply` in Rebase Tokens
 
-Similar to `balanceOf`, the standard `totalSupply()` function returns the value of `_totalSupply`. This variable is only updated during explicit `_mint` and `_burn` operations. It does *not* account for the interest implicitly accruing across *all* token holders.
+Similar to `balanceOf`, the standard `totalSupply()` function returns the value of `_totalSupply`. This variable is only updated during explicit `_mint` and `_burn` operations. It does _not_ account for the interest implicitly accruing across _all_ token holders.
 
-Calculating the *true* effective total supply would require:
+Calculating the _true_ effective total supply would require:
 
 1. Iterating through every single token holder.
 2. Calculating the current effective balance (including interest) for each holder.
@@ -675,11 +675,11 @@ Calculating the *true* effective total supply would require:
 
 This approach presents significant problems:
 
-* **High Gas Costs:** Iterating over potentially thousands or millions of holders is computationally expensive and would consume a large amount of gas.
+-   **High Gas Costs:** Iterating over potentially thousands or millions of holders is computationally expensive and would consume a large amount of gas.
 
-* **Denial of Service (DoS) Risk:** If the number of holders grows too large, the transaction to calculate the total supply could exceed the block gas limit, making it impossible to execute.
+-   **Denial of Service (DoS) Risk:** If the number of holders grows too large, the transaction to calculate the total supply could exceed the block gas limit, making it impossible to execute.
 
-**Decision:** Due to these risks, we will **not override** **`totalSupply`**. We accept the known limitation that `totalSupply()` in this contract will only represent the *principle* total supply (total tokens explicitly minted minus total tokens explicitly burned). It will *not* reflect the full effective supply including all accrued interest. This is a documented design trade-off prioritizing gas efficiency and contract robustness over perfect total supply representation.
+**Decision:** Due to these risks, we will **not override** **`totalSupply`**. We accept the known limitation that `totalSupply()` in this contract will only represent the _principle_ total supply (total tokens explicitly minted minus total tokens explicitly burned). It will _not_ reflect the full effective supply including all accrued interest. This is a documented design trade-off prioritizing gas efficiency and contract robustness over perfect total supply representation.
 
 ### Implementing the `transfer` Override
 
@@ -689,8 +689,8 @@ Our overridden `transfer(address _recipient, uint256 _amount)` performs these st
 
 1. **Mint Accrued Interest:** Before the transfer occurs, call `_mintAccruedInterest(msg.sender)` to update the sender's principle balance with their accrued interest.
 2. **Mint Recipient Interest:** Similarly, call `_mintAccruedInterest(_recipient)` to update the recipient's principle balance.
-3. **Handle Max Amount:** Check if `_amount` is `type(uint256).max`. If so, set `_amount` to the sender's *effective* balance (`balanceOf(msg.sender)`).
-4. **Interest Rate Inheritance:** This is crucial. Check if the recipient had a zero balance *before* this transfer might have started accruing interest for them (ideally check principle balance or if `s_userInterestRate[_recipient]` was zero before step 2). If the recipient is effectively new (`balanceOf(_recipient) == 0` *after* their interest minting in the current implementation), set their interest rate `s_userInterestRate[_recipient]` to match the sender's rate `s_userInterestRate[msg.sender]`. This ensures new holders inherit a rate, preventing them from gaining interest without prior interaction. If the recipient already held tokens, their existing rate remains unchanged, preventing potential manipulation where someone sends dust to lower another user's rate.
+3. **Handle Max Amount:** Check if `_amount` is `type(uint256).max`. If so, set `_amount` to the sender's _effective_ balance (`balanceOf(msg.sender)`).
+4. **Interest Rate Inheritance:** This is crucial. Check if the recipient had a zero balance _before_ this transfer might have started accruing interest for them (ideally check principle balance or if `s_userInterestRate[_recipient]` was zero before step 2). If the recipient is effectively new (`balanceOf(_recipient) == 0` _after_ their interest minting in the current implementation), set their interest rate `s_userInterestRate[_recipient]` to match the sender's rate `s_userInterestRate[msg.sender]`. This ensures new holders inherit a rate, preventing them from gaining interest without prior interaction. If the recipient already held tokens, their existing rate remains unchanged, preventing potential manipulation where someone sends dust to lower another user's rate.
 5. **Execute Transfer:** Call `super.transfer(_recipient, _amount)` to perform the standard ERC20 transfer of the principle amount using the updated balances.
 6. **Return Result:** Return the boolean success value from `super.transfer`.
 
@@ -711,32 +711,254 @@ Our overridden `transferFrom(address _sender, address _recipient, uint256 _amoun
 
 To provide transparency and access to underlying data, we add some helpful getter functions:
 
-* `principleBalanceOf(address _user) external view returns (uint256)`:
+-   `principleBalanceOf(address _user) external view returns (uint256)`:
 
-  * **Purpose:** Allows anyone to query a user's balance *without* the accrued interest component. This is useful for understanding the base amount explicitly held.
+    -   **Purpose:** Allows anyone to query a user's balance _without_ the accrued interest component. This is useful for understanding the base amount explicitly held.
 
-  * **Implementation:** Simply returns `super.balanceOf(_user)`.
+    -   **Implementation:** Simply returns `super.balanceOf(_user)`.
 
-* `getInterestRate() external view returns (uint256)`:
+-   `getInterestRate() external view returns (uint256)`:
 
-  * **Purpose:** Provides read-only access to the current *global* interest rate (`s_interestRate`), as the state variable itself is private. New depositors typically receive this rate.
+    -   **Purpose:** Provides read-only access to the current _global_ interest rate (`s_interestRate`), as the state variable itself is private. New depositors typically receive this rate.
 
-  * **Implementation:** Returns `s_interestRate`.
+    -   **Implementation:** Returns `s_interestRate`.
 
-* `getUserInterestRate(address _user) external view returns (uint256)`:
+-   `getUserInterestRate(address _user) external view returns (uint256)`:
 
-  * **Purpose:** Allows querying the specific interest rate assigned to an individual user (`s_userInterestRate[_user]`), as the mapping is private.
+    -   **Purpose:** Allows querying the specific interest rate assigned to an individual user (`s_userInterestRate[_user]`), as the mapping is private.
 
-  * **Implementation:** Returns `s_userInterestRate[_user]`.
+    -   **Implementation:** Returns `s_userInterestRate[_user]`.
 
 **Note on Rate Consolidation:** Be mindful of scenarios where a user consolidates tokens from multiple addresses they control, potentially with different interest rates. The current transfer logic assigns the sender's rate only if the recipient was new. Consolidating funds into an existing address will not change that address's established interest rate. This behavior should be clearly documented.
 
 ### Critical Next Step: Access Control
 
-We have now implemented the core ERC20 logic adapted for our rebase mechanism. However, there is a **major security vulnerability**: functions like `_mint`, `_burn` (if made public/external), and any administrative functions like `setInterestRate` currently lack access control. This means *anyone* could potentially call them, allowing unauthorized minting, burning, or rate manipulation.
+We have now implemented the core ERC20 logic adapted for our rebase mechanism. However, there is a **major security vulnerability**: functions like `_mint`, `_burn` (if made public/external), and any administrative functions like `setInterestRate` currently lack access control. This means _anyone_ could potentially call them, allowing unauthorized minting, burning, or rate manipulation.
 
 The immediate next step is to implement robust access control, typically using modifiers like `onlyOwner` (from OpenZeppelin's `Ownable.sol`) or more complex role-based access systems, to restrict sensitive functions to authorized addresses only. **This is crucial before deploying the contract.**
 
 ### Conclusion
 
 We have successfully integrated and adapted standard ERC20 functionality for our `RebaseToken`. Key adaptations included overriding `balanceOf`, `transfer`, and `transferFrom` to account for interest accrual and manage interest rate inheritance for new recipients. We made a conscious design decision to leave `totalSupply` representing only the principle supply due to gas and security concerns. Finally, we added essential getter functions for transparency and highlighted the critical, non-negotiable need to implement access control in the next phase.
+
+## Access Control
+
+Smart contracts often manage valuable assets or control critical protocol functions. Without proper restrictions, anyone could potentially call sensitive functions, leading to exploits, theft, or disruption. Access control mechanisms are essential to ensure that only authorized addresses can perform specific actions, enhancing the security and integrity of your decentralized application. OpenZeppelin provides standardized, audited contracts to implement common access control patterns easily. This lesson explores two primary patterns: `Ownable` for single-owner control and `AccessControl` for more granular, role-based permissions, using the `RebaseToken.sol` contract as our example.
+
+## Implementing Single-Owner Control with `Ownable`
+
+The `Ownable` pattern is a straightforward way to restrict access to certain functions to a single designated owner address. Typically, the address deploying the contract becomes the initial owner.
+
+**Concept:**
+
+-   A single `owner` address is stored in the contract.
+
+-   A modifier, `onlyOwner`, is provided to restrict function execution to this owner.
+
+-   Functions are included to view the current owner, transfer ownership to a new address, and renounce ownership entirely.
+
+**Implementation Steps:**
+
+1. **Import** **`Ownable`:** Add the import statement at the top of your contract file.
+
+    ```solidity
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.20;
+
+    import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+    // Import Ownable from OpenZeppelin
+    import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+
+    // (Rest of your contract imports and code)
+    ```
+
+2. **Inherit from** **`Ownable`:** Modify your contract definition to inherit from `Ownable`.
+
+    ```solidity
+    contract RebaseToken is ERC20, Ownable {
+        // ... contract variables and functions ...
+    }
+    ```
+
+3. **Call** **`Ownable`** **Constructor:** In your contract's constructor, call the `Ownable` constructor, passing the desired initial owner address. Using `msg.sender` sets the deployer as the owner.
+
+    ```solidity
+    constructor() ERC20("Rebase Token", "RBT") Ownable(msg.sender) {
+        // Initialize other state variables if needed
+        // s_interestRate = INITIAL_INTEREST_RATE; // Example
+    }
+    ```
+
+    The `Ownable` constructor stores the provided `initialOwner` address in its internal `_owner` variable.
+
+4. **Apply the** **`onlyOwner`** **Modifier:** Use the `onlyOwner` modifier on functions that should only be callable by the contract owner. For `RebaseToken`, we'll restrict the `setInterestRate` function.
+
+    ```solidity
+    /**
+     * @notice Sets the interest rate for the rebase mechanism.
+     * @dev Can only be called by the contract owner.
+     * @dev The new rate must be less than or equal to the current rate.
+     * @param _newInterestRate The new interest rate (e.g., 100 = 1%).
+     */
+    function setInterestRate(uint256 _newInterestRate) external onlyOwner {
+        // Existing logic to check rate decrease
+        if (_newInterestRate > s_interestRate) { // Assuming check is >= 0, and only decrease allowed
+           revert RebaseToken__InterestRateCanOnlyDecrease(s_interestRate, _newInterestRate);
+        }
+        s_interestRate = _newInterestRate;
+        emit InterestRateSet(_newInterestRate);
+    }
+    ```
+
+**Centralization and Auditing Considerations:**
+
+While `Ownable` is simple, it introduces a point of centralization. The owner holds significant power. Auditors will carefully examine functions guarded by `onlyOwner` to understand the potential risks. Can the owner arbitrarily change critical parameters, mint infinite tokens, or pause the contract indefinitely? These powers must be clearly defined and communicated to users.
+
+## Implementing Role-Based Permissions with `AccessControl`
+
+For more complex scenarios where different permissions are needed for various actors, the `AccessControl` pattern provides a flexible solution. It allows defining specific roles and granting those roles to multiple addresses.
+
+**Concept:**
+
+-   Permissions are grouped into "roles," represented by `bytes32` identifiers.
+
+-   Addresses can be granted or revoked specific roles. An address can hold multiple roles.
+
+-   A modifier, `onlyRole`, restricts function execution to addresses holding a specific role.
+
+-   Typically includes an admin role (`DEFAULT_ADMIN_ROLE`) that can manage other roles.
+
+**Implementation Steps:**
+
+1. **Import** **`AccessControl`:** Add the import statement.
+
+    ```solidity
+    // Import AccessControl from OpenZeppelin
+    import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+    ```
+
+2. **Inherit from** **`AccessControl`:** Add `AccessControl` to your contract's inheritance list.
+
+    ```solidity
+    contract RebaseToken is ERC20, Ownable, AccessControl {
+        // ... contract body ...
+    }
+    ```
+
+    _Note: We are keeping_ _`Ownable`_ _here as we'll use the owner to manage roles._
+
+3. **Define Role Identifiers:** Define constants for your roles using `bytes32`. The standard practice is to use the `keccak256` hash of a descriptive string. We need a role for minting and burning tokens.
+
+    ```solidity
+    bytes32 private constant MINT_AND_BURN_ROLE = keccak256("MINT_AND_BURN_ROLE");
+    ```
+
+4. **Grant Roles (Setup):** By default, `AccessControl` requires an admin role (usually `DEFAULT_ADMIN_ROLE`) to grant or revoke other roles. We need to grant this `DEFAULT_ADMIN_ROLE` to our contract owner during deployment. Modify the constructor:
+
+    ```solidity
+    constructor() ERC20("Rebase Token", "RBT") Ownable(msg.sender) {
+        // Grant the deployer (initial owner) the DEFAULT_ADMIN_ROLE
+        // This allows the owner to manage other roles.
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        // Optionally grant the MINT_AND_BURN_ROLE to the owner initially as well,
+        // or grant it later via the dedicated function.
+        // _grantRole(MINT_AND_BURN_ROLE, msg.sender);
+    }
+    ```
+
+    _Self-Correction based on summary review:_ The summary _actually_ shows creating a separate `grantMintAndBurnRole` function controlled by `onlyOwner`, rather than setting up `DEFAULT_ADMIN_ROLE` management directly in the constructor initially (though that's also a valid pattern). Let's adjust to match the summary's approach which uses `Ownable` to gate role granting.
+
+    **Revised Step 4 (Matching Summary): Grant Roles via Owner Function:** Create a dedicated function, restricted by `onlyOwner`, to grant the specific `MINT_AND_BURN_ROLE`. This links the `Ownable` pattern with `AccessControl`.
+
+    ```solidity
+    /**
+     * @notice Grants the MINT_AND_BURN_ROLE to an account.
+     * @dev Can only be called by the contract owner.
+     * @param _account The address to grant the role to.
+     */
+    function grantMintAndBurnRole(address _account) external onlyOwner {
+        _grantRole(MINT_AND_BURN_ROLE, _account);
+        // Optionally emit an event
+        // emit RoleGranted(MINT_AND_BURN_ROLE, _account, msg.sender);
+    }
+    ```
+
+    _Note: We still need to ensure the_ _`DEFAULT_ADMIN_ROLE`_ _is set up correctly for the_ _`MINT_AND_BURN_ROLE`_ _so that_ _`_grantRole`_ _works._ _`AccessControl`'s default setup usually makes the_ _`DEFAULT_ADMIN_ROLE`_ _the admin for new roles. We also need to grant_ _`DEFAULT_ADMIN_ROLE`_ _to the owner in the constructor so they can_ call `_grantRole` via the `grantMintAndBurnRole` function. Let's add that constructor setup back, as it's necessary for the `grantMintAndBurnRole` function (controlled by `onlyOwner`) to succeed.
+
+    **Final Constructor (Combining** **`Ownable`** **and initial** **`AccessControl`** **setup):**
+
+    ```solidity
+    constructor() ERC20("Rebase Token", "RBT") Ownable(msg.sender) {
+        // Grant the deployer (initial owner) the admin role.
+        // This role is required to grant other roles like MINT_AND_BURN_ROLE.
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+    ```
+
+5. **Apply the** **`onlyRole`** **Modifier:** Use the `onlyRole` modifier with the appropriate role identifier (`MINT_AND_BURN_ROLE`) on functions that require that specific permission, like `mint` and `burn`.
+
+    ```solidity
+    /**
+     * @notice Mints new tokens to a specified address.
+     * @dev Requires the caller to have the MINT_AND_BURN_ROLE.
+     * @param _to The address to mint tokens to.
+     * @param _amount The amount of tokens to mint.
+     */
+    function mint(address _to, uint256 _amount) external onlyRole(MINT_AND_BURN_ROLE) {
+        // Assuming internal _mint function exists from ERC20 implementation
+        _mint(_to, _amount);
+    }
+
+    /**
+     * @notice Burns tokens from a specified address.
+     * @dev Requires the caller to have the MINT_AND_BURN_ROLE.
+     * @param _from The address to burn tokens from.
+     * @param _amount The amount of tokens to burn.
+     */
+    function burn(address _from, uint256 _amount) external onlyRole(MINT_AND_BURN_ROLE) {
+        // Assuming internal _burn function exists from ERC20 implementation
+        _burn(_from, _amount);
+    }
+    ```
+
+## Using `Ownable` to Manage `AccessControl` Roles
+
+As demonstrated in the `grantMintAndBurnRole` function, combining `Ownable` and `AccessControl` is a common and powerful pattern. The single `owner` acts as the chief administrator, responsible for assigning specific, granular permissions (roles) to other addresses or contracts using `AccessControl`'s mechanisms.
+
+```solidity
+// Function allowing Owner to grant specific permissions
+function grantMintAndBurnRole(address _account) external onlyOwner { // <-- Restricted by Ownable
+    _grantRole(MINT_AND_BURN_ROLE, _account); // <-- Uses AccessControl internal function
+}
+```
+
+This delegates day-to-day operations (like minting/burning, potentially handled by an automated Vault contract) to addresses with specific roles, while keeping the ultimate administrative control (granting/revoking roles) with the owner.
+
+## Design Choice: Granting Roles Post-Deployment
+
+Why create an external `grantMintAndBurnRole` function instead of granting the role directly in the constructor?
+
+In complex systems, especially those involving multiple contracts or cross-chain interactions, you might encounter **circular dependencies** during deployment. For example, the `RebaseToken` might need the address of a `Vault` contract to grant it the `MINT_AND_BURN_ROLE`, but the `Vault` contract might need the `RebaseToken` address during its own deployment. Deploying them independently and then calling a function like `grantMintAndBurnRole` _after_ both are deployed breaks this dependency cycle.
+
+## Security Considerations and Transparency
+
+Using these access control patterns introduces governance and potential centralization risks.
+
+-   **Owner/Admin Power:** The address holding the `owner` role (in `Ownable`) or the `DEFAULT_ADMIN_ROLE` (in `AccessControl`) has significant control. In our example, the owner can grant the `MINT_AND_BURN_ROLE` to _any_ address, including themselves.
+
+-   **Transparency:** It is crucial to be transparent about who holds these roles and what powers they entail. This information should be clearly documented for users and auditors. The potential actions of privileged roles must be understood to assess the protocol's risks.
+
+## Next Steps: Testing Your Access Control
+
+With the access control mechanisms implemented using `Ownable` and `AccessControl`, the critical next step is rigorous testing. Before integrating with other contracts or deploying, ensure that:
+
+-   Only the owner can call `onlyOwner` functions (e.g., `setInterestRate`, `grantMintAndBurnRole`).
+
+-   Only addresses granted the `MINT_AND_BURN_ROLE` can call `mint` and `burn`.
+
+-   Addresses _without_ the necessary role or ownership cannot call restricted functions.
+
+-   Role granting and potential revoking works as expected.
+
+Using a testing framework like Foundry, aim for comprehensive test coverage of these access control features alongside the core token logic. This builds confidence in the contract's security foundation before proceeding with further development, such as implementing cross-chain functionality.

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
     * @title Rebase Token
@@ -12,21 +14,26 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
     * the prevailing global interest rate upon their first interaction involving balance updates.
     * Balances are calculated dynamically in the `balanceOf` function.
 */
-contract RebaseToken is ERC20 {
+contract RebaseToken is ERC20, Ownable, AccessControl {
     //! Events !//
     event InterestRateSet(uint256 newInterestRate);
 
     //! ERRORS !//
     error RebaseToken__InterestRateCanOnlyIncrease(uint256 currentInterestRate, uint256 proposedInterestRate);
 
-    uint256 constant private PRECISIO_FACTOR = 1e18;
+    uint256 private constant PRECISIO_FACTOR = 1e18;
+    bytes32 private constant MINT_AND_BURN_ROLE = keccak256("MINT_AND_BURN_ROLE");
     uint256 private s_interestRate = 5e10;
     mapping (address => uint256) private s_userInterestRate;
     mapping (address => uint256) private s_userLastUpdatedTimestamp;
 
-    constructor() ERC20("RebaseToken", "RBT") {}
+    constructor() ERC20("RebaseToken", "RBT") Ownable(msg.sender) {}
+    
+    function grantMintAndBurnRole (address _account) external onlyOwner {
+        _grantRole(MINT_AND_BURN_ROLE, _account);
+    }
 
-    function setInterestRate(uint256 _newInterestRate) external {
+    function setInterestRate(uint256 _newInterestRate) external onlyOwner {
         // Ensure the interest rate never decreases
         if (_newInterestRate < s_interestRate)
             revert RebaseToken__InterestRateCanOnlyIncrease(s_interestRate, _newInterestRate);
@@ -39,13 +46,13 @@ contract RebaseToken is ERC20 {
         return super.balanceOf(_user);
     }
 
-    function mint (address _to, uint256 _amount) external {
+    function mint (address _to, uint256 _amount) external onlyRole(MINT_AND_BURN_ROLE) {
         _mintAccuredInterest(_to);
         s_userInterestRate[_to] = s_interestRate;
         _mint(_to, _amount);
     }
 
-    function burn (address _from, uint256 _amount) external {
+    function burn (address _from, uint256 _amount) external onlyRole(MINT_AND_BURN_ROLE) {
         if(_amount == type(uint256).max) _amount = balanceOf(_from);
 
         _mintAccuredInterest(_from);
